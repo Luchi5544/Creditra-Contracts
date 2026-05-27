@@ -15,16 +15,11 @@ mod config;
 mod events;
 mod lifecycle;
 mod query;
+mod accrual;
+mod math_utils;
 mod risk;
 mod storage;
 pub mod types;
-mod auth;
-mod storage;
-mod borrow;
-mod config;
-mod lifecycle;
-mod risk;
-mod query;
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short, token, Address, Env, Symbol,
@@ -53,7 +48,6 @@ fn admin_key(env: &Env) -> Symbol {
     Symbol::new(env, "admin")
 }
 
-pub mod types;
 
 use crate::events::{publish_drawn_event, publish_repayment_event, DrawnEvent, RepaymentEvent};
 use crate::storage::{clear_reentrancy_guard, set_reentrancy_guard, DataKey};
@@ -1156,7 +1150,6 @@ mod test {
         assert_eq!(line.status, CreditStatus::Active);
         assert_utilization_invariants(&line);
     }
-}
 
 #[cfg(test)]
 mod test_smoke_coverage {
