@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 
 //! Reconciliation tests for DefaultLiquidationSettledEvent payload completeness.
 //!
@@ -17,7 +17,7 @@
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-use creditra_credit::events::DefaultLiquidationSettledEvent;
+// Event type is internal; we extract fields from raw event data
 use creditra_credit::types::CreditStatus;
 use creditra_credit::{Credit, CreditClient};
 use soroban_sdk::testutils::Address as _;
@@ -49,7 +49,7 @@ fn setup_defaulted_line(utilized_amount: i128) -> (Env, Address, Address, Addres
     (env, contract_id, borrower, admin)
 }
 
-fn get_last_liq_setl_event(env: &Env) -> DefaultLiquidationSettledEvent {
+fn get_last_liq_setl_event(env: &Env) -> (Address, Symbol, i128, i128, CreditStatus) {
     let namespace = Symbol::new(env, "credit");
     let kind = Symbol::new(env, "liq_setl");
 
@@ -57,7 +57,13 @@ fn get_last_liq_setl_event(env: &Env) -> DefaultLiquidationSettledEvent {
         let t0: Symbol = Symbol::try_from_val(env, &topics.get(0).unwrap()).unwrap();
         let t1: Symbol = Symbol::try_from_val(env, &topics.get(1).unwrap()).unwrap();
         if t0 == namespace && t1 == kind {
-            return data.try_into_val(env).unwrap();
+            let e: soroban_sdk::Vec<soroban_sdk::Val> = data.try_into_val(env).unwrap();
+    let borrower: Address = e.get(0).unwrap().try_into_val(env).unwrap();
+    let settlement_id: Symbol = e.get(1).unwrap().try_into_val(env).unwrap();
+    let recovered_amount: i128 = e.get(2).unwrap().try_into_val(env).unwrap();
+    let remaining: i128 = e.get(3).unwrap().try_into_val(env).unwrap();
+    let status: CreditStatus = e.get(4).unwrap().try_into_val(env).unwrap();
+    return (borrower, settlement_id, recovered_amount, remaining, status);
         }
     }
 
@@ -94,14 +100,14 @@ fn settle_full_recovery_closes_line_and_event_matches_state() {
     assert_eq!(line.status, CreditStatus::Closed);
     assert_eq!(line.utilized_amount, 0);
 
-    let event = get_last_liq_setl_event(&env);
-    assert_eq!(event.borrower, borrower);
-    assert_eq!(event.settlement_id, settlement_id);
-    assert_eq!(event.recovered_amount, 1_000_i128);
-    assert_eq!(event.remaining_utilized_amount, line.utilized_amount);
-    assert_eq!(event.remaining_utilized_amount, 0_i128);
-    assert_eq!(event.status, line.status);
-    assert_eq!(event.status, CreditStatus::Closed);
+    let (event_borrower, event_settlement_id, event_recovered, event_remaining, event_status) = get_last_liq_setl_event(&env);
+    assert_eq!(event_borrower, borrower);
+    assert_eq!(event_settlement_id, settlement_id);
+    assert_eq!(event_recovered, 1_000_i128);
+    assert_eq!(event_remaining, line.utilized_amount);
+    assert_eq!(event_remaining, 0_i128);
+    assert_eq!(event_status, line.status);
+    assert_eq!(event_status, CreditStatus::Closed);
 
     assert_liq_setl_topic_ordering(&env);
 
@@ -127,14 +133,14 @@ fn settle_partial_recovery_keeps_line_defaulted_and_event_matches_state() {
     assert_eq!(line.status, CreditStatus::Defaulted);
     assert_eq!(line.utilized_amount, 700_i128);
 
-    let event = get_last_liq_setl_event(&env);
-    assert_eq!(event.borrower, borrower);
-    assert_eq!(event.settlement_id, settlement_id);
-    assert_eq!(event.recovered_amount, 300_i128);
-    assert_eq!(event.remaining_utilized_amount, line.utilized_amount);
-    assert_eq!(event.remaining_utilized_amount, 700_i128);
-    assert_eq!(event.status, line.status);
-    assert_eq!(event.status, CreditStatus::Defaulted);
+    let (event_borrower, event_settlement_id, event_recovered, event_remaining, event_status) = get_last_liq_setl_event(&env);
+    assert_eq!(event_borrower, borrower);
+    assert_eq!(event_settlement_id, settlement_id);
+    assert_eq!(event_recovered, 300_i128);
+    assert_eq!(event_remaining, line.utilized_amount);
+    assert_eq!(event_remaining, 700_i128);
+    assert_eq!(event_status, line.status);
+    assert_eq!(event_status, CreditStatus::Defaulted);
 
     assert_liq_setl_topic_ordering(&env);
 
@@ -160,12 +166,12 @@ fn settle_minimal_partial_recovery_event_matches_state() {
     assert_eq!(line.status, CreditStatus::Defaulted);
     assert_eq!(line.utilized_amount, 499_i128);
 
-    let event = get_last_liq_setl_event(&env);
-    assert_eq!(event.recovered_amount, 1_i128);
-    assert_eq!(event.remaining_utilized_amount, 499_i128);
-    assert_eq!(event.remaining_utilized_amount, line.utilized_amount);
-    assert_eq!(event.status, CreditStatus::Defaulted);
-    assert_eq!(event.status, line.status);
+    let (event_borrower, event_settlement_id, event_recovered, event_remaining, event_status) = get_last_liq_setl_event(&env);
+    assert_eq!(event_recovered, 1_i128);
+    assert_eq!(event_remaining, 499_i128);
+    assert_eq!(event_remaining, line.utilized_amount);
+    assert_eq!(event_status, CreditStatus::Defaulted);
+    assert_eq!(event_status, line.status);
     assert_liq_setl_topic_ordering(&env);
 }
 
@@ -181,12 +187,12 @@ fn settle_near_full_recovery_event_matches_state() {
     assert_eq!(line.status, CreditStatus::Defaulted);
     assert_eq!(line.utilized_amount, 1_i128);
 
-    let event = get_last_liq_setl_event(&env);
-    assert_eq!(event.recovered_amount, 999_i128);
-    assert_eq!(event.remaining_utilized_amount, 1_i128);
-    assert_eq!(event.remaining_utilized_amount, line.utilized_amount);
-    assert_eq!(event.status, CreditStatus::Defaulted);
-    assert_eq!(event.status, line.status);
+    let (event_borrower, event_settlement_id, event_recovered, event_remaining, event_status) = get_last_liq_setl_event(&env);
+    assert_eq!(event_recovered, 999_i128);
+    assert_eq!(event_remaining, 1_i128);
+    assert_eq!(event_remaining, line.utilized_amount);
+    assert_eq!(event_status, CreditStatus::Defaulted);
+    assert_eq!(event_status, line.status);
     assert_liq_setl_topic_ordering(&env);
 }
 
@@ -198,19 +204,19 @@ fn liq_setl_event_field_ordering_is_stable() {
 
     client.settle_default_liquidation(&borrower, &200_i128, &settlement_id);
 
-    let event = get_last_liq_setl_event(&env);
+    let (event_borrower, event_settlement_id, event_recovered, event_remaining, event_status) = get_last_liq_setl_event(&env);
 
-    assert_eq!(event.borrower, borrower);
-    assert_eq!(event.settlement_id, settlement_id);
-    assert_eq!(event.recovered_amount, 200_i128);
-    assert_eq!(event.remaining_utilized_amount, 600_i128);
-    assert_eq!(event.status, CreditStatus::Defaulted);
+    assert_eq!(event_borrower, borrower);
+    assert_eq!(event_settlement_id, settlement_id);
+    assert_eq!(event_recovered, 200_i128);
+    assert_eq!(event_remaining, 600_i128);
+    assert_eq!(event_status, CreditStatus::Defaulted);
 
-    let _ = event.borrower;
-    let _ = event.settlement_id;
-    let _ = event.recovered_amount;
-    let _ = event.remaining_utilized_amount;
-    let _ = event.status;
+    let _ = event_borrower;
+    let _ = event_settlement_id;
+    let _ = event_recovered;
+    let _ = event_remaining;
+    let _ = event_status;
 }
 
 #[test]
@@ -225,11 +231,11 @@ fn multiple_settlements_each_emit_event_with_correct_state() {
     assert_eq!(line1.utilized_amount, 600_i128);
     assert_eq!(line1.status, CreditStatus::Defaulted);
 
-    let event1 = get_last_liq_setl_event(&env);
-    assert_eq!(event1.recovered_amount, 400_i128);
-    assert_eq!(event1.remaining_utilized_amount, 600_i128);
-    assert_eq!(event1.settlement_id, sid1);
-    assert_eq!(event1.status, CreditStatus::Defaulted);
+    let (event1_borrower, event1_settlement_id, event1_recovered, event1_remaining, event1_status) = get_last_liq_setl_event(&env);
+    assert_eq!(event1_recovered, 400_i128);
+    assert_eq!(event1_remaining, 600_i128);
+    assert_eq!(event1_settlement_id, sid1);
+    assert_eq!(event1_status, CreditStatus::Defaulted);
 
     let sid2 = Symbol::new(&env, "auc_multi_2");
     client.settle_default_liquidation(&borrower, &600_i128, &sid2);
@@ -238,11 +244,11 @@ fn multiple_settlements_each_emit_event_with_correct_state() {
     assert_eq!(line2.utilized_amount, 0_i128);
     assert_eq!(line2.status, CreditStatus::Closed);
 
-    let event2 = get_last_liq_setl_event(&env);
-    assert_eq!(event2.recovered_amount, 600_i128);
-    assert_eq!(event2.remaining_utilized_amount, 0_i128);
-    assert_eq!(event2.settlement_id, sid2);
-    assert_eq!(event2.status, CreditStatus::Closed);
+    let (event2_borrower, event2_settlement_id, event2_recovered, event2_remaining, event2_status) = get_last_liq_setl_event(&env);
+    assert_eq!(event2_recovered, 600_i128);
+    assert_eq!(event2_remaining, 0_i128);
+    assert_eq!(event2_settlement_id, sid2);
+    assert_eq!(event2_status, CreditStatus::Closed);
 
     assert_liq_setl_topic_ordering(&env);
 }
