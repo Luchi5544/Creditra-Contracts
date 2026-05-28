@@ -94,7 +94,9 @@ fn compute_rate_zero_slope() {
 /// Deterministic pseudo-random number generator for reproducible fuzz testing.
 /// Uses a simple linear congruential generator (LCG) seeded by the caller.
 fn deterministic_prng(seed: &mut u64) -> u32 {
-    *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *seed = seed
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     (*seed >> 32) as u32
 }
 
